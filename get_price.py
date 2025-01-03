@@ -5,16 +5,17 @@ import pandas as pd
 import time
 import datetime
 
-
+# Load .env API keys
 load_dotenv()
 
 API_KEY = os.getenv("BINANCE_API_KEY")
 API_SECRET = os.getenv("BINANCE_API_SECRET")
 
-BTC_SYMBOL = "BTCUSDT"
-DATA_DIR = "price_data"
-CSV_FILE = os.path.join(DATA_DIR, f"{BTC_SYMBOL}.csv")
+BTC_SYMBOL = "BTCUSDT"  # Trading pair
+DATA_DIR = "price_data" # Folder to store data
+CSV_FILE = os.path.join(DATA_DIR, f"{BTC_SYMBOL}.csv") # File to store data
 
+# Initialize Binance client
 client = Client(API_KEY, API_SECRET)
 
 
@@ -23,9 +24,11 @@ def main():
         price = get_btc_price()
         if price:
             store_price_data(price)
-            time.sleep(5)
         else:
-            time.sleep(60)
+            print("Failed to retrieve price, retrying next time")
+            
+        # Interval between each GET PRICE
+        time.sleep(5)
 
 
 def get_btc_price(symbol=BTC_SYMBOL):
