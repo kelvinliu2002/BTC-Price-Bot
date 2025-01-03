@@ -13,7 +13,7 @@ API_SECRET = os.getenv("BINANCE_API_SECRET")
 
 BTC_SYMBOL = "BTCUSDT"
 DATA_DIR = "price_data"
-CSV_FILE = os.path.join(DATA_DIR, f"{BTC_SYMBOL}".csv)
+CSV_FILE = os.path.join(DATA_DIR, f"{BTC_SYMBOL}.csv")
 
 client = Client(API_KEY, API_SECRET)
 
@@ -23,6 +23,7 @@ def main():
         price = get_btc_price()
         if price:
             store_price_data(price)
+            time.sleep(5)
         else:
             time.sleep(60)
 
