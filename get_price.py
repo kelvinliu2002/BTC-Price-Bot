@@ -1,5 +1,4 @@
 import os
-import csv
 from binance import Client, exceptions
 from dotenv import load_dotenv
 import pandas as pd
@@ -45,19 +44,20 @@ def store_price_data(price, symbol=BTC_SYMBOL):
 
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    try:
-        with open(CSV_FILE, "x", newline="") as csvfile:
-            fieldnames = ["Timestamp", "Symbol", "Price"]
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-    except FileExistsError:
-        pass
+    new_data = pd.DataFrame([{"Timestamp": timestamp, "Symbol": symbol, "Price": price}])
 
-    with open(CSV_FILE, "a", newline="") as csvfile:
-        fieldnames = ["Timestamp", "Symbol", "Price"]
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writerow({"Timestamp": timestamp, "Symbool": symbol, "Price": price})
+    if os.path.isfile(CSV_FILE):
+        # Read existing data
+        df = pd.read_csv(CSV_FILE)
 
+        # Concatenate new data to existing
+        df = pd.concat([df, new_data], ignore_index=True)
+    else:
+        # If file doesn't exist, use new_data as DataFrame
+        df = new_data
+
+    # Write the DataFrame to CSV
+    df.to_csv(CSV_FILE, index=False)
 
 
 if __name__ == "__main__":
