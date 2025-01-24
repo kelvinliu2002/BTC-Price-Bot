@@ -1,67 +1,158 @@
 import os
-from binance import Client, exceptions
+from abc import ABC, abstractmethod
+from binance import Client as BinanceClient, exceptions as binance_exceptions
 from dotenv import load_dotenv
 import pandas as pd
 import time
 import datetime
+import requests
 
 # Load .env API keys
 load_dotenv()
 
-API_KEY = os.getenv("BINANCE_API_KEY")
-API_SECRET = os.getenv("BINANCE_API_SECRET")
+DATA_DIR = "price_data"  # Folder to store data
 
-BTC_SYMBOL = "BTCUSDT"  # Trading pair
-DATA_DIR = "price_data" # Folder to store data
-CSV_FILE = os.path.join(DATA_DIR, f"{BTC_SYMBOL}.csv") # File to store data
 
-# Initialize Binance client
-client = Client(API_KEY, API_SECRET)
+class ExchangeClient(ABC):
+    def __init__(self):
+        pass
+
+    @abstractmethod
+    def get_price_data(self):
+        """Get current price and symbol from exchange"""
+        pass
+    
+    @abstractmethod
+    def get_exchange_name(self):
+        """Return exchange name for file naming"""
+        pass
+
+
+class BinanceExchangeClient(ExchangeClient):
+    def __init__(self):
+        super().__init__()
+    
+    def get_price_data(self):
+        try:
+            url = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+            headers = {"accept": "application/json"}
+            response = requests.get(url, headers=headers)
+            data = response.json()
+            return {
+                "price": float(data["price"]),
+                "symbol": data["symbol"]
+            }
+        except Exception as e:
+            print(f"Binance error occurred: {e}")
+            return None
+            
+    def get_exchange_name(self):
+        return "binance"
+
+
+class OSLExchangeClient(ExchangeClient):
+    def __init__(self):
+        super().__init__()
+
+    def get_price_data(self):
+        try:
+            url = "https://trade-hk.oslsandbox.com/api/v4/instrument?symbol=BTCUSD"
+            headers = {"accept": "application/json"}
+            response = requests.get(url, headers=headers)
+            data = response.json()
+
+            for item in data:
+                if item["symbol"] == "BTCUSD":
+                    return {
+                        "price": float(item["bidPrice"]),
+                        "symbol": item["symbol"]
+                    }
+            return None
+        except Exception as e:
+            print(f"OSL error occurred: {e}")
+            return None
+            
+    def get_exchange_name(self):
+        return "osl"
+
+
+class HashKeyExchangeClient(ExchangeClient):
+    def __init__(self):
+        super().__init__()
+    
+    def get_price_data(self):
+        try:
+            url = "https://api-pro.sim.hashkeydev.com/quote/v1/ticker/price?symbol=BTCUSD"
+            headers = {"accept": "application/json"}
+            response = requests.get(url, headers=headers)
+            data = response.json()
+            for item in data:
+                if item["s"] == "BTCUSD":
+                    return {
+                        "price": float(item["p"]),
+                        "symbol": item["s"]
+                    }
+            return None
+        except Exception as e:
+            print(f"HashKey error occurred: {e}")
+            return None
+
+    def get_exchange_name(self):
+        return "hashkey"
 
 
 def main():
-    while True:
-        price = get_btc_price()
-        if price:
-            store_price_data(price)
-        else:
-            print("Failed to retrieve price, retrying next time")
-            
-        # Interval between each GET PRICE
-        time.sleep(5)
-
-
-def get_btc_price(symbol=BTC_SYMBOL):
-    try:
-        ticker = client.get_symbol_ticker(symbol=symbol)
-        return float(ticker["price"])
-    except exceptions.BinanceAPIException as e:
-        print(f"An error occurred: {e}")
-        return None
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        return None
+    # Initialize exchange clients
+    exchanges = [
+        BinanceExchangeClient(),
+        OSLExchangeClient(),
+        HashKeyExchangeClient()
+    ]
     
+    while True:
+        for exchange in exchanges:
+            price_data = exchange.get_price_data()
+            if price_data:
+                store_price_data(
+                    exchange_name=exchange.get_exchange_name(),
+                    price=price_data["price"],
+                    symbol=price_data["symbol"]
+                )
+            else:
+                print(f"Failed to retrieve price from {exchange.get_exchange_name()}, retrying next time")
+        
+        time.sleep(0.5)
+        
 
-def store_price_data(price, symbol=BTC_SYMBOL):
+def store_price_data(exchange_name, price, symbol):
     timestamp = datetime.datetime.now()
+    
+    try:
+        # Ensure data directory exists
+        if not os.path.exists(DATA_DIR):
+            os.makedirs(DATA_DIR, exist_ok=True)
+            print(f"Created directory: {DATA_DIR}")
+            
+        csv_file = os.path.join(DATA_DIR, f"{symbol}_{exchange_name}.csv")
+        
+        new_data = pd.DataFrame([{
+            "Timestamp": timestamp,
+            "Symbol": symbol,
+            "Price": price,
+        }])
 
-    os.makedirs(DATA_DIR, exist_ok=True)
+        if os.path.isfile(csv_file):
+            df = pd.read_csv(csv_file)
+            df = pd.concat([df, new_data], ignore_index=True)
+        else:
+            df = new_data
 
-    new_data = pd.DataFrame([{"Timestamp": timestamp, "Symbol": symbol, "Price": price}])
-
-    if os.path.isfile(CSV_FILE):
-        # Read existing data
-        df = pd.read_csv(CSV_FILE)
-
-        # Concatenate new data to existing
-        df = pd.concat([df, new_data], ignore_index=True)
-    else:
-        # If file doesn't exist, use new_data as DataFrame
-        df = new_data
-
-    # Write the DataFrame to CSV
-    df.to_csv(CSV_FILE, index=False)
+        df.to_csv(csv_file, index=False)
+    except Exception as e:
+        print(f"Error storing price data: {e}")
+        # Create alternative file path in current directory if data dir fails
+        csv_file = f"{symbol}_{exchange_name}.csv"
+        new_data.to_csv(csv_file, index=False)
 
 
 if __name__ == "__main__":
