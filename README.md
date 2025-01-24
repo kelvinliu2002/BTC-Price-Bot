@@ -2,7 +2,6 @@
 
 A bot that runs 24/7 and collects BTC price every minute from multiple exchanges.
 
-
 Arbitrage bot idea:
 - set up accounts on multiple exchanges with available liquidity in all accounts
 - get prices (could be triangular arbitrage)
